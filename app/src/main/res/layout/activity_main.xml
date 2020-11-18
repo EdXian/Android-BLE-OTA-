@@ -111,6 +111,14 @@
             android:id="@+id/B_verify_cmd"
             android:onClick="B_Verify_cmd_onclick"/>
 
+        <Button
+            android:layout_marginTop="8dp"
+            android:paddingVertical="25dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="key"
+            android:id="@+id/B_key_cmd"
+            android:onClick="B_key_cmd_onclick"/>
 
         <Button
             android:layout_marginTop="8dp"
@@ -122,6 +130,14 @@
             android:onClick="B_clear_cmd_onclick"/>
 
         <Button
+            android:id="@+id/button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="download .Bin"
+            android:onClick="B_download_bin"
+            />
+
+        <Button
             android:layout_marginTop="8dp"
             android:paddingVertical="25dp"
             android:layout_width="match_parent"
@@ -129,6 +145,7 @@
             android:text="close"
             android:id="@+id/B_close"
             android:onClick="B_close"/>
+
     </LinearLayout>
 
 </ScrollView>

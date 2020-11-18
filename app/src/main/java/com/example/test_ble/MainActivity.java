@@ -2,6 +2,7 @@ package com.example.test_ble;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.DownloadManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -107,8 +108,9 @@ public class MainActivity extends AppCompatActivity {
         pg_bar = findViewById(R.id.progressBar3);
         pg_tv = findViewById(R.id.progress_text);
         global.getInstance().init(this);
-        String ota_device_name = "Biologue_OTA";
+        String ota_device_name = "SMART_SEAT1.3";
         BLEM = global.getInstance().BLEMan;
+
         if(!BLEM.isBluetoothEnabled())
         {
             DisplayToast("Bluetooth disabled");
@@ -124,7 +126,7 @@ public class MainActivity extends AppCompatActivity {
         B_Upgrade.setEnabled(false);
     }
 
-    
+
     public void checkPermission()
     {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE)!=PackageManager.PERMISSION_GRANTED){
@@ -253,8 +255,6 @@ public class MainActivity extends AppCompatActivity {
             B_Loadfile.setEnabled(false);
             B_Upgrade.setEnabled(false);
         }
-
-
     }
 
     public void update_progress(int count){
@@ -264,6 +264,7 @@ public class MainActivity extends AppCompatActivity {
 
     public void B_Disconnect_onClick(View v)
     {
+
         if(BLEM.isConnected())
             BLEM.Disconnect();
         else
@@ -271,10 +272,19 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
+    public void ota_key_cmd(){
+        byte[] data= new byte[18];
+        data[0] = 0x49;
+        data[1] = 0x10;
+        for(int i=2;i<18;i++) {
+            data[i] = (byte)i;
+        }
+        BLEM.UART_Writebytes(data);
+    }
+
+
     public void ota_start_cmd(int addr, int len){
-
         byte[] pack =new byte[10];
-
         pack[0] = (byte)0x50;
         pack[1] = (byte)0x08;
 
@@ -291,13 +301,10 @@ public class MainActivity extends AppCompatActivity {
         BLEM.UART_Writebytes(pack);
     }
 
-
-
-
     public void ota_write_cmd(byte[] pdata){
         byte[] pack = new byte[pdata.length+2];
         pack[0] = 0x51;
-        pack[1] = 0x01;
+        pack[1] = (byte)(pdata.length&0xff);
         for(int i=2; i<pack.length; i++){
             pack[i] = pdata[i-2];
         }
@@ -315,6 +322,9 @@ public class MainActivity extends AppCompatActivity {
         BLEM.UART_Writebytes(data);
     }
 
+
+
+
     public void ota_flash_cmd(){
         byte[] data={(byte)0x54,(byte)0x01,(byte)0x43,(byte)0x12, (byte) 0xab, (byte) 0xcd};
         BLEM.UART_Writebytes(data);
@@ -324,7 +334,8 @@ public class MainActivity extends AppCompatActivity {
         ota_start_cmd((int)address,page.length);
         int remain_size  = page.length;
         int count = 0;
-        int pack_size = 128;
+        int pack_size = 128;   //default 128
+
         while (remain_size > 0 ) {
             if (remain_size >= pack_size) {
                 ota_write_cmd(Arrays.copyOfRange(page, count, count+pack_size));
@@ -343,25 +354,43 @@ public class MainActivity extends AppCompatActivity {
         ota_verify_cmd();
     }
 
+    public int checksum_error(byte[] data) {
+        int sum = 0;
+        for(int i=0;i<data.length;i++) {
+            sum+= data[i];
+        }
+        sum = (sum&0xffff);
+        return sum;
+    }
+
+
+
     public void ota_upgrade() {
         int address = 0x50000;
         int remain_size = ota_binary_data.length;
         int count = 0;
-        int page_size = 4096;
+        int page_size = 4096;   //default 4096
         ota_clearrom_cmd();
         while(remain_size>0){
+
             if(remain_size >= page_size){
 
-                ota_write_page((int)address,   Arrays.copyOfRange(ota_binary_data, count, count+page_size));
+                byte[] tmp = Arrays.copyOfRange(ota_binary_data, count, count+page_size);
+                Log.e("checksum",Integer.toHexString(checksum_error(tmp)));
+                ota_write_page((int)address,  tmp);
                 address += page_size;
                 count = count + page_size;
                 remain_size -= page_size;
+
             }else{
 
-                ota_write_page((int)address,   Arrays.copyOfRange(ota_binary_data, count, count+remain_size));
+                byte[] tmp = Arrays.copyOfRange(ota_binary_data, count, count+remain_size);
+                Log.e("checksum",Integer.toHexString(checksum_error(tmp)));
+                ota_write_page((int)address,  tmp);
                 address += remain_size;
                 count = count + remain_size;
                 remain_size = 0;
+
             }
             progress_count = 100 - (remain_size*100/ ota_binary_data.length);
             hdlr.post(new Runnable() {
@@ -373,41 +402,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-/*
-    public void ota_upgrade1() throws InterruptedException {
 
-
-        int remain_size = ota_binary_data.length;
-        int count = 0;
-
-
-        ota_clearrom_cmd();
-        ota_start_cmd((int)0x50000,ota_binary_data.length);
-
-        while (remain_size > 0 ) {
-            if (remain_size > 128) {
-                //ota_write_cmd(Arrays.copyOfRange(ota_binary_data, count, count+128));
-                //count += 128;
-                //remain_size -= 128;
-            } else {
-                //ota_write_cmd(Arrays.copyOfRange(ota_binary_data, count, count+remain_size));
-                //ota_write_cmd(pack);
-                count += remain_size;
-                remain_size = 0;
-            }
-            progress_count = 100 - (remain_size*100/ ota_binary_data.length);
-            hdlr.post(new Runnable() {
-                public void run() {
-                    update_progress(progress_count);
-                }
-            });
-        }
-
-        ota_flash_cmd();
-
-
-    }
-*/
     public void B_Start_cmd_onclick(View v){
         ota_start_cmd(0x50000,0);
     }
@@ -456,4 +451,26 @@ public class MainActivity extends AppCompatActivity {
         finish();
         System.exit(0);
     }
+
+
+
+    public void B_download_bin(View view) {
+//        String downloadUrl="";
+//        DownloadManager.Request request = new DownloadManager.Request(Uri.parse(downloadUrl));
+//
+//        request.allowScanningByMediaScanner();
+//        request.setNotificationVisibility(DownloadManager.
+//                Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+//        request.setDestinationInExternalPublicDir("/Biologue_OTA", "binary.bin");
+//        DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+//        dm.enqueue(request);
+
+        Toast.makeText(getApplicationContext(), "Downloading File",  Toast.LENGTH_LONG).show();
+
+    }
+
+    public void B_key_cmd_onclick(View view) {
+        ota_key_cmd();
+    }
+
 }
