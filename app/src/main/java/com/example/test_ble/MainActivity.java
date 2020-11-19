@@ -311,24 +311,64 @@ public class MainActivity extends AppCompatActivity {
         BLEM.UART_Writebytes(pack);
     }
 
-    public void ota_verify_cmd(){
-        byte[] data={(byte)0x52,(byte)0x01,(byte)0x43,(byte)0x12, (byte) 0xab, (byte) 0xcd};
+    public void ota_verify_cmd(int check){
+
+
+        //byte[] data={(byte)0x52,(byte)0x01,(byte)0x43,(byte)0x12, (byte) 0xab, (byte) 0xcd};
+
+        byte[] data = new byte[6];
+        data[0] = (byte)0x52;
+        data[1] = (byte)0x01;
+
+        data[2] = (byte)(check>>0);
+        data[3] = (byte)(check>>8);
+        data[4] = (byte)(check>>16);
+        data[5] = (byte)(check>>24);
+
         BLEM.UART_Writebytes(data);
+
     }
 
-    public void ota_clearrom_cmd(){
-        byte[] data={(byte)0x53,(byte)0x08,(byte)0x00,(byte)0x00, (byte) 0x05, (byte) 0x00
-                ,(byte)0x00,(byte)0x00, (byte) 0x07, (byte) 0x00};
+    public void ota_clearrom_cmd(int start_addr, int end_addr){
+//        byte[] data={(byte)0x53,(byte)0x08,(byte)0x00,(byte)0x00, (byte) 0x05, (byte) 0x00
+//                ,(byte)0x00,(byte)0x00, (byte) 0x07, (byte) 0x00};
+
+        byte[] data = new byte[10];
+        data[0] = 0x53;
+        data[1] = 0x08;
+
+        data[2] = (byte)(start_addr>>0);
+        data[3] = (byte)(start_addr>>8);
+        data[4] = (byte)(start_addr>>16);
+        data[5] = (byte)(start_addr>>24);
+
+        data[6] = (byte)(end_addr>>0);
+        data[7] = (byte)(end_addr>>8);
+        data[8] = (byte)(end_addr>>16);
+        data[9] = (byte)(end_addr>>24);
+
         BLEM.UART_Writebytes(data);
     }
-
-
-
-
     public void ota_flash_cmd(){
         byte[] data={(byte)0x54,(byte)0x01,(byte)0x43,(byte)0x12, (byte) 0xab, (byte) 0xcd};
         BLEM.UART_Writebytes(data);
     }
+
+    public void ota_check_version(){
+        byte[] data = new byte[2];
+        data[0] = (byte)0x55;
+        data[1] = (byte)0x01;
+        BLEM.UART_Writebytes(data);
+    }
+
+    public static byte byte_sum(byte... bytes) {
+        byte total = 0;
+        for (byte b : bytes) {
+            total += b;
+        }
+        return total;
+    }
+
     public void ota_write_page(int address, byte[] page){
 
         ota_start_cmd((int)address,page.length);
@@ -350,8 +390,12 @@ public class MainActivity extends AppCompatActivity {
 
 
         }
+
         ota_flash_cmd();
-        ota_verify_cmd();
+        byte checksum = byte_sum(page);
+        Log.e("checksum","checksum = " + Byte.toString(checksum));
+        ota_verify_cmd(checksum);
+
     }
 
     public int checksum_error(byte[] data) {
@@ -364,19 +408,20 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-
     public void ota_upgrade() {
         int address = 0x50000;
         int remain_size = ota_binary_data.length;
         int count = 0;
         int page_size = 4096;   //default 4096
-        ota_clearrom_cmd();
+
+        ota_key_cmd();
+        ota_check_version();
+        ota_clearrom_cmd(0x50000,0x70000);
         while(remain_size>0){
 
             if(remain_size >= page_size){
 
                 byte[] tmp = Arrays.copyOfRange(ota_binary_data, count, count+page_size);
-                Log.e("checksum",Integer.toHexString(checksum_error(tmp)));
                 ota_write_page((int)address,  tmp);
                 address += page_size;
                 count = count + page_size;
@@ -385,7 +430,6 @@ public class MainActivity extends AppCompatActivity {
             }else{
 
                 byte[] tmp = Arrays.copyOfRange(ota_binary_data, count, count+remain_size);
-                Log.e("checksum",Integer.toHexString(checksum_error(tmp)));
                 ota_write_page((int)address,  tmp);
                 address += remain_size;
                 count = count + remain_size;
@@ -400,6 +444,7 @@ public class MainActivity extends AppCompatActivity {
             });
 
         }
+
     }
 
 
@@ -408,7 +453,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void B_Verify_cmd_onclick(View v){
-        ota_verify_cmd();
+
+
+
     }
 
 
@@ -427,23 +474,36 @@ public class MainActivity extends AppCompatActivity {
 
         new Thread(new Runnable() {
             public void run() {
+                // a potentially time consuming task
+                long startTime =   System.nanoTime();
+                ota_upgrade();
+                Log.e("Measure", "TASK took : " +Long.toString((System.nanoTime()-startTime)/1000000)+"ms");
 
-
-
-            long startTime =   System.nanoTime();
-            ota_upgrade();
-            Log.e("Measure", "TASK took : " +Long.toString((System.nanoTime()-startTime)/1000000)+"ms");
-
-            Timestamp_text.setText("Time duration:" + ((System.nanoTime()-startTime)/1000000)+"ms");
-
-
-
+                Timestamp_text.setText("Time duration:" + ((System.nanoTime()-startTime)/1000000)+"ms");
             }
         }).start();
+
+
+//        new Thread(new Runnable() {
+//            public void run() {
+//
+//
+//
+//                long startTime =   System.nanoTime();
+//                ota_upgrade();
+//                Log.e("Measure", "TASK took : " +Long.toString((System.nanoTime()-startTime)/1000000)+"ms");
+//
+//                Timestamp_text.setText("Time duration:" + ((System.nanoTime()-startTime)/1000000)+"ms");
+//
+//
+//
+//            }
+//        }).start();
     }
 
     public void B_clear_cmd_onclick(View view) {
-        ota_clearrom_cmd();
+
+        ota_clearrom_cmd(0x50000,0x51000);
     }
 
     public void B_close(View view) {

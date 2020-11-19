@@ -168,6 +168,8 @@ public class BLEManager {
     {
         WriteValue(CHARACTERISTIC_UART_RX, msg);
     }
+
+
     public void UART_Writebytes(byte[] data){
 
         while (get_ack_from_ble !=true){ ; }
@@ -175,7 +177,6 @@ public class BLEManager {
         UART_Writebyte(CHARACTERISTIC_UART_RX,data);
 
         get_ack_from_ble = false;
-
 
     }
 
@@ -423,8 +424,10 @@ public class BLEManager {
             
             if(characteristic.equals(CHARACTERISTIC_UART_TX))
             {
+
                 byte[] value_bytes_raw = characteristic.getValue();
                 get_ack_from_ble = true;
+
             }
 
         }
