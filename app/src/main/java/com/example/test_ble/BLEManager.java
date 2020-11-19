@@ -172,7 +172,18 @@ public class BLEManager {
 
     public void UART_Writebytes(byte[] data){
 
-        while (get_ack_from_ble !=true){ ; }
+        long startTime = System.nanoTime();
+        long interval = 0;
+
+       //Long.toString((System.nanoTime()-startTime)/1000000)
+
+
+        //Timestamp_text.setText("Time duration:" + ((System.nanoTime()-startTime)/1000000)+"ms");
+
+        while ((get_ack_from_ble !=true) && (interval <3000)){
+            interval  = (System.nanoTime() - startTime)/1000000  ;
+         }
+
 
         UART_Writebyte(CHARACTERISTIC_UART_RX,data);
 
@@ -421,11 +432,10 @@ public class BLEManager {
         @Override
         public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
             super.onCharacteristicChanged(gatt, characteristic);
-            
             if(characteristic.equals(CHARACTERISTIC_UART_TX))
             {
-
                 byte[] value_bytes_raw = characteristic.getValue();
+
                 get_ack_from_ble = true;
 
             }
