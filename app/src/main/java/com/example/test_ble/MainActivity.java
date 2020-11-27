@@ -54,12 +54,27 @@ public class MainActivity extends AppCompatActivity {
     TextView TV_Out;
     TextView TV_Status;
     TextView TV_path;
+    TextView TV_verify;
     Button B_Disconnect;
     Button B_Upgrade;
     Button B_Loadfile;
     Button B_Start_cmd;
     Button B_Verify_cmd;
     Button B_Clear_cmd;
+
+    int ota_times = 0;
+    byte[] sha256key = {
+            (byte)0x49,(byte)0x10,
+            (byte)0x25,(byte)0x4a,(byte)0x2a,(byte)0x6e,(byte)0xe0,(byte)0xe3,(byte)0xd5,(byte)0x6d,
+            (byte)0x75,(byte)0x95,(byte)0xb8,(byte)0x5d,(byte)0x85,(byte)0xfc,(byte)0xee,(byte)0x7,
+            (byte)0x7b,(byte)0xd5,(byte)0xcc,(byte)0x5f,(byte)0x4,(byte)0xc7,(byte)0x9e,(byte)0x66,
+            (byte)0x5a,(byte)0x49,(byte)0x3,(byte)0x21,(byte)0x14,(byte)0x42,(byte)0x99,(byte)0x83,
+            (byte)0x1c,(byte)0x81,(byte)0x97,(byte)0x45,(byte)0xb2,(byte)0xd8,(byte)0x6c,(byte)0x31,
+            (byte)0xc5,(byte)0x70,(byte)0x62,(byte)0x35,(byte)0xff,(byte)0xb2,(byte)0x78,(byte)0xae,
+            (byte)0xe2,(byte)0x49,(byte)0xd9,(byte)0x93,(byte)0x3c,(byte)0x54,(byte)0xd9,(byte)0x47,
+            (byte)0xd0,(byte)0xe2,(byte)0x16,(byte)0x17,(byte)0x12,(byte)0x3d,(byte)0x8,(byte)0xa3};
+
+
     TextView Timestamp_text;
     ProgressBar pg_bar;
     TextView pg_tv;
@@ -96,6 +111,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         Log.e(TAG,"onCreate()");
         checkPermission();
+        TV_verify = findViewById(R.id.verify_text);
         TV_Status = findViewById(R.id.TV_Status);
         B_Disconnect = findViewById(R.id.B_Disconnect);
         B_Upgrade = findViewById(R.id.B_upgrade_cmd);
@@ -273,13 +289,9 @@ public class MainActivity extends AppCompatActivity {
 
 
     public void ota_key_cmd(){
-        byte[] data= new byte[18];
-        data[0] = 0x49;
-        data[1] = 0x10;
-        for(int i=2;i<18;i++) {
-            data[i] = (byte)i;
-        }
-        BLEM.UART_Writebytes(data);
+
+        //byte[] data = sha256key;
+        BLEM.UART_Writebytes(sha256key);
     }
 
 
@@ -310,6 +322,10 @@ public class MainActivity extends AppCompatActivity {
         }
         BLEM.UART_Writebytes(pack);
     }
+
+
+
+
 
     public void ota_verify_cmd(int check){
 
@@ -407,16 +423,26 @@ public class MainActivity extends AppCompatActivity {
         return sum;
     }
 
-
     public void ota_upgrade() {
         int address = 0x50000;
         int remain_size = ota_binary_data.length;
         int count = 0;
         int page_size = 4096;   //default 4096
 
+        // if ecdsa_verify failed restart ota_key_cmd until pass verification.
         ota_key_cmd();
-        ota_check_version();
+        while(BLEM.is_ble_ack == false){
+            ota_key_cmd();
+        }
+
         ota_clearrom_cmd(0x50000,0x70000);
+        while(BLEM.is_ble_ack == false){
+            ota_clearrom_cmd(0x50000,0x70000);
+        }
+
+
+        ota_times=ota_times +1;      //39   //31
+
         while(remain_size>0){
 
             if(remain_size >= page_size){
@@ -436,9 +462,14 @@ public class MainActivity extends AppCompatActivity {
                 remain_size = 0;
 
             }
+
+
             progress_count = 100 - (remain_size*100/ ota_binary_data.length);
             hdlr.post(new Runnable() {
                 public void run() {
+                    TV_verify.setText("Times: " + Integer.toString(ota_times) +
+                                        "  verify f" + Integer.toString(BLEM.verify_fail_count) +
+                                        "  clear f:" +Integer.toString(BLEM.clear_fail_count) );
                     update_progress(progress_count);
                 }
             });
@@ -465,21 +496,32 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void B_upgrade_cmd_onclick(View view) {
-        progress_count = 0;
-        hdlr.post(new Runnable() {
-            public void run() {
-                update_progress(progress_count);
-            }
-        });
+
 
         new Thread(new Runnable() {
             public void run() {
                 // a potentially time consuming task
+            while(true){
                 long startTime =   System.nanoTime();
+                progress_count = 0;
+                hdlr.post(new Runnable() {
+                    public void run() {
+                        update_progress(progress_count);
+                    }
+                });
                 ota_upgrade();
                 Log.e("Measure", "TASK took : " +Long.toString((System.nanoTime()-startTime)/1000000)+"ms");
-
                 Timestamp_text.setText("Time duration:" + ((System.nanoTime()-startTime)/1000000)+"ms");
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+
+
+
+
             }
         }).start();
 

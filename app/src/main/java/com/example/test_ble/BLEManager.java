@@ -44,8 +44,13 @@ public class BLEManager {
     BluetoothGattCharacteristic CHARACTERISTIC_UART_TX = null;
     BluetoothGattCharacteristic CHARACTERISTIC_UART_RX = null;
 
-    Boolean get_ack_from_ble = true;
+    Boolean get_ack_from_ble = false;
+    public int verify_pass_count = 0;
+    public int verify_fail_count = 0;
 
+    public int clear_pass_count = 0;
+    public int clear_fail_count = 0;
+    public boolean is_ble_ack = false;
     public int ota_rssi;
 
     public StringBuilder UART_INPUT_BUFFER = new StringBuilder();
@@ -85,12 +90,8 @@ public class BLEManager {
     public void Connect(Activity activity)
     {
         Log.e(TAG,"Connect() to " + SERVER_NAME);
-
-        // Bluetooth
         bluetoothManager = (BluetoothManager) activity.getSystemService(BLUETOOTH_SERVICE);
         bluetoothAdapter = bluetoothManager.getAdapter();
-
-
         startScan();
     }
 
@@ -99,7 +100,6 @@ public class BLEManager {
         SERVER_NAME = ServerName;
         Connect(activity);
     }
-
 
     public void Disconnect()
     {
@@ -176,18 +176,23 @@ public class BLEManager {
         long interval = 0;
 
        //Long.toString((System.nanoTime()-startTime)/1000000)
-
-
         //Timestamp_text.setText("Time duration:" + ((System.nanoTime()-startTime)/1000000)+"ms");
-
-        while ((get_ack_from_ble !=true) && (interval <3000)){
-            interval  = (System.nanoTime() - startTime)/1000000  ;
-         }
-
+        get_ack_from_ble = false;
 
         UART_Writebyte(CHARACTERISTIC_UART_RX,data);
+        // waiting for ack from ble device
 
-        get_ack_from_ble = false;
+        while ((get_ack_from_ble !=true) && (interval <3000)){      //timeout 3s
+            interval  = (System.nanoTime() - startTime)/1000000  ;
+        }
+
+        if( interval >=3000 ) {
+            is_ble_ack = false;
+            Log.e("OTA","device  nack");
+        }else{
+            is_ble_ack = true;
+           // Log.e("OTA","device  ack");
+        }
 
     }
 
@@ -434,9 +439,50 @@ public class BLEManager {
             super.onCharacteristicChanged(gatt, characteristic);
             if(characteristic.equals(CHARACTERISTIC_UART_TX))
             {
-                byte[] value_bytes_raw = characteristic.getValue();
-
+                byte[] ack = characteristic.getValue();
+                /*
+                key_state = 0x49,
+                start_state = 0x50,
+                write_state =0x51 ,
+                verify_state = 0x52,
+                clearrom_state =0x53,
+                flash_state =0x54,
+                check_version_state=0x55,
+                label_state=0x56
+                 */
                 get_ack_from_ble = true;
+                switch (ack[0]) {
+                    case 0x49:  
+
+                        break;
+                    case 0x50:
+                        if(ack[1] == 14){
+                            clear_fail_count = clear_fail_count +1;
+                        }
+                        break;
+
+                    case  0x51:
+
+                        break;
+
+                    case  0x52:
+
+                        if(ack[1] == 10){
+                            verify_pass_count = verify_pass_count+1;
+                        }else if(ack[1] == 11){
+                            verify_fail_count = verify_fail_count+1;
+                        }
+                        break;
+                    case 0x53:
+                        if(ack[1] == 12){
+                            clear_pass_count = clear_pass_count +1;
+                        }else if(ack[1] == 13){
+                            clear_fail_count = clear_fail_count +1;
+                        }
+                        break;
+                }
+
+
 
             }
 

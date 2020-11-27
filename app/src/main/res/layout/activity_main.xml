@@ -68,6 +68,12 @@
             android:layout_height="wrap_content"
             android:text="Time:" />
 
+        <TextView
+            android:id="@+id/verify_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="verify:" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="67dp"
