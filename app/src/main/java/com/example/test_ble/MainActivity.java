@@ -377,6 +377,28 @@ public class MainActivity extends AppCompatActivity {
         BLEM.UART_Writebytes(data);
     }
 
+    public void ota_burn(int start_addr, int length){
+//        byte[] data = new byte[10];
+//        data[0] = (byte)0x57;
+//        data[1] = (byte)0x01;
+//        data[2] = (byte)0x00;
+
+        byte[] data = new byte[10];
+        data[0] = 0x57;
+        data[1] = 0x08;
+        data[2] = (byte)(start_addr>>0);
+        data[3] = (byte)(start_addr>>8);
+        data[4] = (byte)(start_addr>>16);
+        data[5] = (byte)(start_addr>>24);
+        data[6] = (byte)(length>>0);
+        data[7] = (byte)(length>>8);
+        data[8] = (byte)(length>>16);
+        data[9] = (byte)(length>>24);
+        BLEM.UART_Writebytes(data);
+    }
+
+
+
     public static byte byte_sum(byte... bytes) {
         byte total = 0;
         for (byte b : bytes) {
@@ -385,21 +407,26 @@ public class MainActivity extends AppCompatActivity {
         return total;
     }
 
-    public void ota_write_page(int address, byte[] page){
+    public int ota_write_page(int address, byte[] page){
 
-        ota_start_cmd((int)address,page.length);
         int remain_size  = page.length;
         int count = 0;
         int pack_size = 128;   //default 128
+        int err_ret = 0;
+
+
+        ota_start_cmd((int)address,page.length);                  //cmd1
 
         while (remain_size > 0 ) {
             if (remain_size >= pack_size) {
-                ota_write_cmd(Arrays.copyOfRange(page, count, count+pack_size));
+
+                ota_write_cmd(Arrays.copyOfRange(page, count, count+pack_size));   //cmd2
+
                 count += pack_size;
                 remain_size -= pack_size;
             } else {
 
-                ota_write_cmd(Arrays.copyOfRange(page, count, count+remain_size));
+                ota_write_cmd(Arrays.copyOfRange(page, count, count+remain_size));   //cmd2
                 count += remain_size;
                 remain_size = 0;
             }
@@ -407,11 +434,14 @@ public class MainActivity extends AppCompatActivity {
 
         }
 
-        ota_flash_cmd();
+        ota_flash_cmd();                        //cmd3
+
         byte checksum = byte_sum(page);
         Log.e("checksum","checksum = " + Byte.toString(checksum));
-        ota_verify_cmd(checksum);
 
+        ota_verify_cmd(checksum);                                                       //cmd4
+
+        return err_ret;
     }
 
     public int checksum_error(byte[] data) {
@@ -430,21 +460,19 @@ public class MainActivity extends AppCompatActivity {
         int page_size = 4096;   //default 4096
 
         // if ecdsa_verify failed restart ota_key_cmd until pass verification.
-        ota_key_cmd();
-        while(BLEM.is_ble_ack == false){
+        //if the ble device always return noack then try to restart ota upgrade function.
+        // do while
+        do {
             ota_key_cmd();
-        }
+        }while(BLEM.is_ble_ack == false);
 
-        ota_clearrom_cmd(0x50000,0x70000);
-        while(BLEM.is_ble_ack == false){
+        do {
             ota_clearrom_cmd(0x50000,0x70000);
-        }
-
+        }while(BLEM.is_ble_ack == false);
 
         ota_times=ota_times +1;      //39   //31
 
         while(remain_size>0){
-
             if(remain_size >= page_size){
 
                 byte[] tmp = Arrays.copyOfRange(ota_binary_data, count, count+page_size);
@@ -480,7 +508,12 @@ public class MainActivity extends AppCompatActivity {
 
 
     public void B_Start_cmd_onclick(View v){
-        ota_start_cmd(0x50000,0);
+
+        do {
+           // ota_clearrom_cmd(0x50000,0x70000);
+            ota_burn(0x6000, ota_binary_data.length);
+        }while(BLEM.is_ble_ack == false);
+
     }
 
     public void B_Verify_cmd_onclick(View v){
@@ -501,23 +534,29 @@ public class MainActivity extends AppCompatActivity {
         new Thread(new Runnable() {
             public void run() {
                 // a potentially time consuming task
-            while(true){
-                long startTime =   System.nanoTime();
-                progress_count = 0;
-                hdlr.post(new Runnable() {
-                    public void run() {
-                        update_progress(progress_count);
-                    }
-                });
-                ota_upgrade();
-                Log.e("Measure", "TASK took : " +Long.toString((System.nanoTime()-startTime)/1000000)+"ms");
-                Timestamp_text.setText("Time duration:" + ((System.nanoTime()-startTime)/1000000)+"ms");
-                try {
-                    Thread.sleep(500);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
+
+            long startTime =   System.nanoTime();
+            progress_count = 0;
+            hdlr.post(new Runnable() {
+                public void run() {
+                    update_progress(progress_count);
                 }
+            });
+            ota_upgrade();
+
+            do {
+                // ota_clearrom_cmd(0x50000,0x70000);
+                ota_burn(0x6000, ota_binary_data.length);
+            }while(BLEM.is_ble_ack == false);
+
+            Log.e("Measure", "TASK took : " +Long.toString((System.nanoTime()-startTime)/1000000)+"ms");
+            Timestamp_text.setText("Time duration:" + ((System.nanoTime()-startTime)/1000000)+"ms");
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
             }
+
 
 
 
