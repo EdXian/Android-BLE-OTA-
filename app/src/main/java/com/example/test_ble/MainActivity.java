@@ -61,7 +61,9 @@ public class MainActivity extends AppCompatActivity {
     Button B_Start_cmd;
     Button B_Verify_cmd;
     Button B_Clear_cmd;
-
+    int major;
+    int minor;
+    int patch;
     int ota_times = 0;
     byte[] sha256key = {
             (byte)0x49,(byte)0x10,
@@ -78,6 +80,8 @@ public class MainActivity extends AppCompatActivity {
     TextView Timestamp_text;
     ProgressBar pg_bar;
     TextView pg_tv;
+    ProgressBar pg_bar4;
+    TextView pg_tv4;
     boolean UpdateUART = false;
     public int progress_count = 0;
     public int PERMISSION_REQUEST_STORAGE = 1000;
@@ -88,6 +92,7 @@ public class MainActivity extends AppCompatActivity {
     protected PowerManager.WakeLock mWakeLock;
     //Timer that recularly calles itself
     private Handler hdlr = new Handler();
+    private Handler hdlr2 = new Handler();
     Handler timerHandler = new Handler();
     Runnable timerRunnable = new Runnable() {
 
@@ -99,11 +104,19 @@ public class MainActivity extends AppCompatActivity {
                     Update_UI();
                 }
             });
+            hdlr.post(new Runnable() {
+                public void run() {
+
+                    update_progress4(BLEM.ota_progress_count);
+                    String ver_str = Integer.toString(BLEM.ver_major)+"_"+Integer.toString(BLEM.ver_minor)+"_"+Integer.toString(BLEM.ver_patch);
+                    B_Start_cmd.setText("VERSION:"+ver_str);
+                    //Log.e("progess", Integer.toString(BLEM.ota_progress_count));
+                }
+            });
+
             timerHandler.postDelayed(this, 100);
         }
     };
-
-
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -123,6 +136,10 @@ public class MainActivity extends AppCompatActivity {
         TV_path = findViewById(R.id.TV_path);
         pg_bar = findViewById(R.id.progressBar3);
         pg_tv = findViewById(R.id.progress_text);
+
+        pg_bar4= findViewById(R.id.progressBar4);
+        pg_tv4 = findViewById(R.id.progress4_text);
+
         global.getInstance().init(this);
         String ota_device_name = "SMART_SEAT1.3";
         BLEM = global.getInstance().BLEMan;
@@ -139,6 +156,7 @@ public class MainActivity extends AppCompatActivity {
         //Start UI Update Timer
         timerHandler.postDelayed(timerRunnable, 0);
         pg_bar.setProgress(progress_count);
+        pg_bar4.setProgress(0);
         B_Upgrade.setEnabled(false);
     }
 
@@ -204,7 +222,25 @@ public class MainActivity extends AppCompatActivity {
                 Uri uri= data.getData();
                 String path = uri.getPath();
                 //get correct filename from uri
-                Toast.makeText(this,"load file : "+ get_file_name_from_uri(uri), Toast.LENGTH_SHORT).show();
+                String file_name = get_file_name_from_uri(uri);
+                Log.e("sep",file_name);
+                String test_set = "99_1_13.bin";
+                file_name = file_name .replace(".bin","");
+                //file_name = "_"+file_name;
+                Log.e("sep",file_name);
+                String[] separated = file_name.split("_");
+
+
+                major = Integer.valueOf(separated[0]);
+                minor = Integer.valueOf(separated[1]);
+                patch = Integer.valueOf(separated[2]);
+
+                Log.e("sep",Integer.toString(major));
+                Log.e("sep",Integer.toString(minor));
+                Log.e("sep",Integer.toString(patch));
+
+
+                Toast.makeText(this,"load file : "+ file_name, Toast.LENGTH_SHORT).show();
                 String filesize = Long.toString(get_file_size_from_uri(uri));
                 TV_path.setText(  "rssi;"+Integer.toString(BLEM.ota_rssi)  +"\r\n" +get_file_name_from_uri(uri) +"\r\n" +"size: "+filesize + "bytes");
 
@@ -277,6 +313,12 @@ public class MainActivity extends AppCompatActivity {
         pg_tv.setText( Integer.toString(count) + "%");
         pg_bar.setProgress(count);
     }
+
+    public void update_progress4(int count){
+        pg_tv4.setText( Integer.toString(count) + "%");
+        pg_bar4.setProgress(count);
+    }
+
 
     public void B_Disconnect_onClick(View v)
     {
@@ -377,6 +419,20 @@ public class MainActivity extends AppCompatActivity {
         BLEM.UART_Writebytes(data);
     }
 
+    public void ota_write_label(int addr,int major,int minor, int patch){
+        byte[] data = new byte[8];
+        data[0] = (byte)0x56;
+        data[1] = (byte)(addr>>0);
+        data[2] = (byte)(addr>>8);
+        data[3] = (byte)(addr>>16);
+        data[4] = (byte)(addr>>24);
+
+        data[5] = (byte)major;
+        data[6] = (byte)minor;
+        data[7] = (byte)patch;
+        BLEM.UART_Writebytes(data);
+    }
+
     public void ota_burn(int start_addr, int length){
 //        byte[] data = new byte[10];
 //        data[0] = (byte)0x57;
@@ -395,6 +451,7 @@ public class MainActivity extends AppCompatActivity {
         data[8] = (byte)(length>>16);
         data[9] = (byte)(length>>24);
         BLEM.UART_Writebytes(data);
+
     }
 
 
@@ -466,13 +523,17 @@ public class MainActivity extends AppCompatActivity {
             ota_key_cmd();
         }while(BLEM.is_ble_ack == false);
 
+        //ota_write_label(0x6000,major,minor,patch);
+
         do {
             ota_clearrom_cmd(0x50000,0x70000);
         }while(BLEM.is_ble_ack == false);
 
+
         ota_times=ota_times +1;      //39   //31
 
         while(remain_size>0){
+
             if(remain_size >= page_size){
 
                 byte[] tmp = Arrays.copyOfRange(ota_binary_data, count, count+page_size);
@@ -492,6 +553,7 @@ public class MainActivity extends AppCompatActivity {
             }
 
 
+
             progress_count = 100 - (remain_size*100/ ota_binary_data.length);
             hdlr.post(new Runnable() {
                 public void run() {
@@ -499,6 +561,8 @@ public class MainActivity extends AppCompatActivity {
                                         "  verify f" + Integer.toString(BLEM.verify_fail_count) +
                                         "  clear f:" +Integer.toString(BLEM.clear_fail_count) );
                     update_progress(progress_count);
+                   // update_progress4(BLEM.ota_progress_count);
+                   // Log.e("progess", Integer.toString(BLEM.ota_progress_count));
                 }
             });
 
@@ -509,16 +573,14 @@ public class MainActivity extends AppCompatActivity {
 
     public void B_Start_cmd_onclick(View v){
 
-        do {
-           // ota_clearrom_cmd(0x50000,0x70000);
-            ota_burn(0x6000, ota_binary_data.length);
-        }while(BLEM.is_ble_ack == false);
+        ota_check_version();
+
 
     }
 
     public void B_Verify_cmd_onclick(View v){
 
-
+        ota_write_label(0x6000,major,minor,patch);
 
     }
 
@@ -539,9 +601,22 @@ public class MainActivity extends AppCompatActivity {
             progress_count = 0;
             hdlr.post(new Runnable() {
                 public void run() {
-                    update_progress(progress_count);
+                    update_progress(0);
+                    update_progress4(0);
+                    BLEM.ota_progress_count = 0;
                 }
             });
+
+            do {
+                ota_write_label(0x6000,major,minor,patch);
+            }while(BLEM.is_ble_ack == false);
+
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
             ota_upgrade();
 
             do {

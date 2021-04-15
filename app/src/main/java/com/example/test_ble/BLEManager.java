@@ -52,7 +52,10 @@ public class BLEManager {
     public int clear_fail_count = 0;
     public boolean is_ble_ack = false;
     public int ota_rssi;
-
+    public int ota_progress_count;
+    public int ver_major;
+    public int ver_minor;
+    public int ver_patch;
     public StringBuilder UART_INPUT_BUFFER = new StringBuilder();
 
 
@@ -449,6 +452,9 @@ public class BLEManager {
                 flash_state =0x54,
                 check_version_state=0x55,
                 label_state=0x56
+                version state = 0x65
+
+                progress_state = 0x70
                  */
                 get_ack_from_ble = true;
                 switch (ack[0]) {
@@ -479,6 +485,15 @@ public class BLEManager {
                         }else if(ack[1] == 13){
                             clear_fail_count = clear_fail_count +1;
                         }
+                        break;
+                    case 0x55:
+                         ver_major=ack[1] ;
+                         ver_minor=ack[2];
+                         ver_patch = ack[3];
+                        break;
+                    case 0x70:
+                        ota_progress_count = ack[1];
+
                         break;
                 }
 
